@@ -1,0 +1,72 @@
+import { useEffect, type RefObject } from 'react'
+import { useAudioContext } from '@/composables/useAudioContext'
+
+import {
+  useCanvasContext,
+  fillCanvasBackground,
+  fillGradient
+} from '@/composables/useCanvasContext'
+
+import { Line, type PropsLineType } from '@/composables/useProps'
+
+export function useAVLine<T extends object>(
+  player: RefObject<HTMLAudioElement | null>,
+  canvas: RefObject<HTMLCanvasElement | null>,
+  props: T
+) {
+  const p = new Line(props as PropsLineType)
+  const ctx = useCanvasContext(canvas, p)
+
+  useEffect(() => {
+    if (!p.placeholder || !ctx.current) return
+    draw(new Uint8Array(p.fftSize), ctx, p)
+  }, [ctx, p])
+
+  useAudioContext(player, p.fftSize, (data: Uint8Array) => {
+    draw(data, ctx, new Line(props as PropsLineType))
+  })
+}
+
+export function draw(
+  data: Uint8Array,
+  canvas: { current: CanvasRenderingContext2D | null },
+  props: Line
+) {
+  const ctx = canvas.current
+  if (!ctx) return
+
+  const w = props.canvWidth
+  const h = props.canvHeight
+  const lw = props.lineWidth
+
+  const dataLen = data.length
+  const step = ~~w / 2.0 / dataLen
+  let x = 0
+
+  const drawLine = (): number => {
+    let y = 0
+    for (let i = 0; i < dataLen; i++) {
+      const v = data[i]
+      y = (h * (255 - v)) / 510
+      if (i % 2) y = h - y
+      ctx.lineTo(x, y)
+      x += step
+    }
+    return x
+  }
+
+  fillCanvasBackground(ctx, w, h, props.canvFillColor)
+
+  ctx.lineWidth = lw
+  ctx.strokeStyle = fillGradient(ctx, w, h, props.lineColor)
+  ctx.beginPath()
+
+  data.reverse()
+  ctx.moveTo(x, h / 2)
+  x = drawLine()
+
+  data.reverse()
+  drawLine()
+  ctx.lineTo(w, h / 2)
+  ctx.stroke()
+}
